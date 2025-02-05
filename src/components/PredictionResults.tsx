@@ -1,0 +1,65 @@
+import React, { useState } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Brain } from 'lucide-react';
+import EEGVisualization from './EEGVisualization';
+import { usePrediction } from '../context/PredictionContext';
+
+
+const PredictionResults = () => {
+  const [activeTab, setActiveTab] = useState('timeSeries');
+  const { prediction } = usePrediction(); 
+
+  // Sample EEG data
+  const eegData = Array.from({ length: 100 }, (_, i) => ({
+    time: i * 0.01,
+    value: 25 * Math.sin(i * 0.1) * Math.cos(i * 0.05) + Math.random() * 5
+  }));
+
+  const eegFeatures = [
+    { name: 'Alpha Power', value: '8.3 µV²' },
+    { name: 'Beta Power', value: '4.7 µV²' },
+    { name: 'Theta Power', value: '6.1 µV²' },
+    { name: 'Delta Power', value: '12.5 µV²' },
+    { name: 'Gamma Power', value: '2.1 µV²' }
+  ];
+
+  return (
+    <div className="max-w-7xl mx-auto p-8">
+      <h2 className="text-4xl font-bold mb-10">EEG Analysis Results</h2>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {/* Prediction Result Card */}
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          <h3 className="text-2xl font-semibold mb-6">Prediction Result</h3>
+          <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-8 text-center">
+            <div className="flex justify-center mb-6">
+              <Brain className="h-20 w-20 text-white" />
+            </div>
+            <div className="text-4xl font-bold text-white mb-3">{prediction}</div>
+          </div>
+          <p className="mt-6 text-gray-700 text-lg text-center">
+            Based on the analyzed EEG signals, the predicted condition is {prediction}.
+          </p>
+        </div>
+
+        {/* Key Features Card */}
+        <div className="bg-white rounded-xl shadow-lg p-8">
+          <h3 className="text-2xl font-semibold mb-6">Key EEG Features</h3>
+          <div className="space-y-5">
+            {eegFeatures.map((feature, index) => (
+              <div key={index} className="flex justify-between items-center p-4 rounded-lg hover:bg-gray-100 transition-colors">
+                <span className="text-gray-700 text-lg">{feature.name}</span>
+                <span className="font-semibold text-lg">{feature.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* EEG Signal Visualization */}
+      <EEGVisualization />
+    </div>
+  );
+};
+
+export default PredictionResults;
