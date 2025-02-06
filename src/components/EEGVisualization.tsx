@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import WaveSurfer from 'wavesurfer.js'; // Import wavesurfer.js
+import WaveSurfer from 'wavesurfer.js';
 
-// Define types for EEG data
 type EEGData = {
   time: number;
   value: number;
@@ -10,29 +9,61 @@ type EEGData = {
 
 const EEGVisualization = () => {
   const [activeTab, setActiveTab] = useState<'timeSeries' | 'spectrogram'>('timeSeries');
-  const [eegData, setEegData] = useState<EEGData[]>([]); // Set state type to EEGData[]
-  const wavesurferRef = useRef<WaveSurfer | null>(null); // Type the wavesurferRef
+  const [eegData, setEegData] = useState<EEGData[]>([]);
+  const wavesurferRef = useRef<WaveSurfer | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  
 
   useEffect(() => {
-    const loadEEGData = async () => {
+    const fetchFilePath = async () => {
       try {
-        const response = await fetch('files/sub-88000313_ses-1_task-restEO_eeg.vhdr'); // Correct file path
-        const text = await response.text();
-        const parsedData = parseVHDR(text);
-        setEegData(parsedData);
-      } catch (error) {
-        console.error('Error loading EEG data:', error);
+        const response = await fetch('http://localhost:5000/get_latest_file');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        return data.latest_vhdr_path;
+      } catch (err) {
+        console.error("Error fetching file path:", err);
+        setError("Error fetching file path from server.");
+        return null;
       }
     };
 
-    loadEEGData();
+    const loadEEGData = async (filePath: string | null) => {
+      if (!filePath) return; // Don't proceed if file path is null
+
+      const fullPath = `uploads/${filePath}`;
+      try {
+        const response = await fetch(fullPath);
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error(`File not found: ${fullPath}`);
+            } else {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+        }
+
+        const text = await response.text();
+        const parsedData = parseVHDR(text);
+        setEegData(parsedData);
+        setError(null); // Clear any previous errors
+      } catch (error) {
+        console.error('Error loading EEG data:', error);
+        setEegData([]);
+        setError("File was not found or corrupted."); // Set the error message
+      }
+    };
+
+    fetchFilePath().then(loadEEGData); // Chain promises
   }, []);
+
+
 
   useEffect(() => {
     if (eegData.length > 0 && activeTab === 'spectrogram') {
-      // Initialize WaveSurfer when EEG data is loaded and spectrogram tab is active
       if (wavesurferRef.current) {
-        wavesurferRef.current.destroy(); // Destroy previous instance if any
+        wavesurferRef.current.destroy();
       }
 
       const wavesurfer = WaveSurfer.create({
@@ -43,29 +74,28 @@ const EEGVisualization = () => {
         responsive: true,
         plugins: [
           WaveSurfer.plugins.spectrogram.create({
-            container: '#spectrogramContainer', // Container for the spectrogram
-            labels: true, // Show labels
+            container: '#spectrogramContainer',
+            labels: true,
           }),
         ],
       });
 
-      // Convert EEG data to audio buffer (simulating sound waveform for visualization)
       const audioBuffer = createAudioBufferFromEEGData(eegData);
-      wavesurfer.loadDecodedBuffer(audioBuffer); // Load the audio buffer into WaveSurfer
-      wavesurferRef.current = wavesurfer; // Save the instance for cleanup
+      wavesurfer.loadDecodedBuffer(audioBuffer);
+      wavesurferRef.current = wavesurfer;
     }
   }, [eegData, activeTab]);
 
-  // Convert EEG data to an audio buffer (mock conversion, real conversion depends on your EEG data format)
+
   const createAudioBufferFromEEGData = (data: EEGData[]) => {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)(); // Get AudioContext
-    const sampleRate = 256; // Sampling rate for EEG data, adjust as needed
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const sampleRate = 256;
     const length = data.length;
-    const buffer = audioContext.createBuffer(1, length, sampleRate); // Single channel audio buffer
+    const buffer = audioContext.createBuffer(1, length, sampleRate);
     const channelData = buffer.getChannelData(0);
 
     data.forEach((point, index) => {
-      channelData[index] = point.value; // Assuming `value` is the amplitude of the EEG signal
+      channelData[index] = point.value;
     });
 
     return buffer;
@@ -82,7 +112,9 @@ const EEGVisualization = () => {
       }
     });
 
-    // Generate mock EEG data since raw EEG is in a separate .eeg file
+    // Placeholder for actual data parsing.  This is where you'd parse the .vhdr
+    // and .eeg files.  For now, generating mock data.  You'll need to
+    // implement the real parsing logic here.
     for (let i = 0; i < 1000; i++) {
       data.push({
         time: i * samplingInterval,
@@ -95,29 +127,15 @@ const EEGVisualization = () => {
 
   const renderTimeSeries = () => (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart
-        data={eegData}
-        margin={{ top: 20, right: 30, bottom: 20, left: 40 }} // Adjusting the margin to compress the chart
-      >
+        <LineChart data={eegData} margin={{ top: 20, right: 30, bottom: 20, left: 40 }}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis
-          dataKey="time"
-          label={{ value: 'Time (s)', position: 'bottom', offset: 0 }} // Adjust label positioning
-        />
-        <YAxis
-          label={{
-            value: 'Amplitude (µV)',
-            angle: -90,
-            position: 'left',
-            offset: 0, // Adjust Y axis label positioning
-          }}
-        />
+        <XAxis dataKey="time" label={{ value: 'Time (s)', position: 'bottom', offset: 0 }} />
+        <YAxis label={{ value: 'Amplitude (µV)', angle: -90, position: 'left', offset: 0 }} />
         <Tooltip />
         <Line type="monotone" dataKey="value" stroke="#6366f1" dot={false} strokeWidth={2} />
-      </LineChart>
+        </LineChart>
     </ResponsiveContainer>
   );
-  
 
   const renderSpectrogram = () => (
     <div id="spectrogramContainer" className="h-full w-full flex items-center justify-center"></div>
@@ -126,7 +144,7 @@ const EEGVisualization = () => {
   return (
     <div className="bg-white rounded-xl shadow-lg p-8">
       <h3 className="text-xl font-semibold mb-6">EEG Signal Visualization</h3>
-      
+
       <div className="flex gap-4 mb-6">
         <button
           className={`px-6 py-3 rounded-lg ${activeTab === 'timeSeries' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}
@@ -134,15 +152,16 @@ const EEGVisualization = () => {
         >
           Time Series
         </button>
-        {/* <button
-          className={`px-6 py-3 rounded-lg ${activeTab === 'spectrogram' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}
-          onClick={() => setActiveTab('spectrogram')}
-        >
-          Spectrogram
-        </button> */}
       </div>
 
-      <div className="h-[500px]">{activeTab === 'timeSeries' ? renderTimeSeries() : renderSpectrogram()}</div>
+      {error && <p className="text-red-500">{error}</p>} {/* Display error message */}
+      <div className="h-[500px]">
+        {eegData.length > 0 ? (
+          activeTab === 'timeSeries' ? renderTimeSeries() : renderSpectrogram()
+        ) : !error ? (
+          <p>Loading EEG Data...</p> // Show loading message if no error and no data
+        ) : null}
+      </div>
     </div>
   );
 };

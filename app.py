@@ -39,6 +39,7 @@ app.add_middleware(
 # Directory for storing uploaded files
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+vhdr_path=""
 
 # Load trained model
 MODEL_PATH = "mw/svm_model.pkl"
@@ -197,5 +198,15 @@ async def get_predictions():
     """Retrieve all past predictions."""
     return {"predictions": predictions}
 
+@app.get("/get_latest_file")
+async def get_latest_file():
+    """Retrieve the latest uploaded vhdr file path from the predictions."""
+    if not predictions:
+        raise HTTPException(status_code=404, detail="No predictions available")
+
+    latest_prediction = predictions[-1]  # Get the latest prediction
+    latest_vhdr_path = latest_prediction["files"][0]  # The first file in the list is the vhdr file
+
+    return {"latest_vhdr_path": latest_vhdr_path}
 
 ##### uvicorn app:app --host 0.0.0.0 --port 5000

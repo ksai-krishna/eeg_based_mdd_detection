@@ -10,11 +10,6 @@ const PredictionResults = () => {
   const { prediction,delta, theta, alpha, beta } = usePrediction(); 
 console.log("Extracted Prediction:", prediction);
 console.log("Type of Prediction:", typeof prediction); 
-  // Sample EEG data
-  const eegData = Array.from({ length: 100 }, (_, i) => ({
-    time: i * 0.01,
-    value: 25 * Math.sin(i * 0.1) * Math.cos(i * 0.05) + Math.random() * 5
-  }));
   
   const eegFeatures = [
     { name: 'Alpha Power', value: `${alpha} µV²` },
