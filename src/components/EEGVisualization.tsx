@@ -95,15 +95,29 @@ const EEGVisualization = () => {
 
   const renderTimeSeries = () => (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={eegData}>
+      <LineChart
+        data={eegData}
+        margin={{ top: 20, right: 30, bottom: 20, left: 40 }} // Adjusting the margin to compress the chart
+      >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="time" label={{ value: 'Time (s)', position: 'bottom' }} />
-        <YAxis label={{ value: 'Amplitude (µV)', angle: -90, position: 'left' }} />
+        <XAxis
+          dataKey="time"
+          label={{ value: 'Time (s)', position: 'bottom', offset: 0 }} // Adjust label positioning
+        />
+        <YAxis
+          label={{
+            value: 'Amplitude (µV)',
+            angle: -90,
+            position: 'left',
+            offset: 0, // Adjust Y axis label positioning
+          }}
+        />
         <Tooltip />
         <Line type="monotone" dataKey="value" stroke="#6366f1" dot={false} strokeWidth={2} />
       </LineChart>
     </ResponsiveContainer>
   );
+  
 
   const renderSpectrogram = () => (
     <div id="spectrogramContainer" className="h-full w-full flex items-center justify-center"></div>
