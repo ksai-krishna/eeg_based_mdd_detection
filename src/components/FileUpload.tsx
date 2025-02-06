@@ -18,7 +18,7 @@ const FileUpload = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [showFileTypeError, setShowFileTypeError] = useState(false);
   const navigate = useNavigate();
-  const { setPrediction } = usePrediction();
+  const { setPredictionData } = usePrediction();
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -142,7 +142,9 @@ const FileUpload = () => {
                 params: { vhdr: vhdr,vmrk:vmrk,eeg:eeg },  // Send file path as a query parameter
               });
               console.log("Prediction Response:", pred_response.data);
-        setPrediction(String(pred_response.data.prediction));
+              console.log("prediction is ",pred_response.data.prediction)
+        setPredictionData(pred_response.data);
+        
         navigate("/prediction")
       } else {
         throw new Error("Failed to upload files.");

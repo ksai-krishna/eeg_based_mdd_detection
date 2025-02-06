@@ -23,7 +23,7 @@ app = FastAPI()
 # Add CORS middleware
 origins = [
     "http://localhost:5173",  # Allow React frontend (change if your frontend runs on a different port)
-    "http://localhost:3000",  # (optional) Add other frontend URLs here if needed
+    "http://localhost:5000",  # (optional) Add other frontend URLs here if needed
 ]
 
 app.add_middleware(
@@ -84,8 +84,38 @@ def preprocess_and_extract_features(vhdr_path, vmrk_path, eeg_path):
 
     events = mne.make_fixed_length_events(raw_clean, duration=2.0)
     epochs = mne.Epochs(raw_clean, events, tmin=0, tmax=2.0, baseline=None, preload=True)
+    
+    return epochs
 
-    return extract_features_from_epochs(epochs)
+
+
+
+
+def freq_domain_features(epochs):
+    """Extract features from EEG epochs."""
+    data = epochs.get_data()
+
+    mean = np.mean(data, axis=2)
+    variance = np.var(data, axis=2)
+    skewness = skew(data, axis=2)
+    kurtosis_values = kurtosis(data, axis=2)
+    time_features = np.concatenate([mean, variance, skewness, kurtosis_values], axis=1)
+
+    psd, freqs = psd_array_welch(data, sfreq=epochs.info['sfreq'], fmin=1, fmax=40, n_fft=256)
+    delta = np.mean(psd[:, :, (freqs >= 1) & (freqs < 4)], axis=2)
+    theta = np.mean(psd[:, :, (freqs >= 4) & (freqs < 8)], axis=2)
+    alpha = np.mean(psd[:, :, (freqs >= 8) & (freqs < 13)], axis=2)
+    beta = np.mean(psd[:, :, (freqs >= 13) & (freqs < 30)], axis=2)
+    delta_mean = np.mean(delta)
+    theta_mean = np.mean(theta)
+    alpha_mean = np.mean(alpha)
+    beta_mean = np.mean(beta)
+
+    # freq_features = np.concatenate([delta, theta, alpha, beta], axis=1)
+    # print("*****************freq feature ***************************",freq_features)
+    # print("*****************time feature ***************************",time_features)
+    return delta_mean,theta_mean,alpha_mean,beta_mean
+
 
 def extract_features_from_epochs(epochs):
     """Extract features from EEG epochs."""
@@ -103,7 +133,8 @@ def extract_features_from_epochs(epochs):
     alpha = np.mean(psd[:, :, (freqs >= 8) & (freqs < 13)], axis=2)
     beta = np.mean(psd[:, :, (freqs >= 13) & (freqs < 30)], axis=2)
     freq_features = np.concatenate([delta, theta, alpha, beta], axis=1)
-
+    # print("*****************freq feature ***************************",freq_features)
+    # print("*****************time feature ***************************",time_features)
     return np.concatenate([time_features, freq_features], axis=1)
 
 @app.post("/upload/")
@@ -141,8 +172,10 @@ async def predict(request: Request):
         raise HTTPException(status_code=400, detail="Uploaded files not found!")
 
     # Process the EEG files (replace with your own function)
-    features = preprocess_and_extract_features(vhdr_full_path, vmrk_full_path, eeg_full_path)
     
+    epochs = preprocess_and_extract_features(vhdr_full_path, vmrk_full_path, eeg_full_path)
+    features = extract_features_from_epochs(epochs)
+    delta,theta,alpha,beta = freq_domain_features(epochs)
     # Make prediction (replace with your model logic)
     prediction = model.predict(features)
 
@@ -152,7 +185,12 @@ async def predict(request: Request):
     predictions.append({"files": [vhdr_path, vmrk_path, eeg_path], "prediction": result})
 
     # Return the prediction as a JSON response
-    return {"prediction": result}
+    print(delta,theta,alpha,beta)
+    print("************************************")
+
+
+
+    return {"prediction": result,"delta": f"{delta:.5e}","theta": f"{theta:.5e}","alpha": f"{alpha:.5e}","beta": f"{beta:5e}"}
 
 @app.get("/prediction/")
 async def get_predictions():
@@ -160,4 +198,4 @@ async def get_predictions():
     return {"predictions": predictions}
 
 
-##### uvicorn app:app --host 0.0.0.0 --port 5000 #####
+##### uvicorn app:app --host 0.0.0.0 --port 5000

@@ -7,22 +7,29 @@ import { usePrediction } from '../context/PredictionContext';
 
 const PredictionResults = () => {
   const [activeTab, setActiveTab] = useState('timeSeries');
-  const { prediction } = usePrediction(); 
-
+  const { prediction,delta, theta, alpha, beta } = usePrediction(); 
+console.log("Extracted Prediction:", prediction);
+console.log("Type of Prediction:", typeof prediction); 
   // Sample EEG data
   const eegData = Array.from({ length: 100 }, (_, i) => ({
     time: i * 0.01,
     value: 25 * Math.sin(i * 0.1) * Math.cos(i * 0.05) + Math.random() * 5
   }));
-
+  
   const eegFeatures = [
-    { name: 'Alpha Power', value: '8.3 µV²' },
-    { name: 'Beta Power', value: '4.7 µV²' },
-    { name: 'Theta Power', value: '6.1 µV²' },
-    { name: 'Delta Power', value: '12.5 µV²' },
-    { name: 'Gamma Power', value: '2.1 µV²' }
+    { name: 'Alpha Power', value: `${alpha} µV²` },
+    { name: 'Beta Power', value: `${beta} µV²` },
+    { name: 'Theta Power', value: `${theta} µV²` },
+    { name: 'Delta Power', value: `${delta} µV²` },
   ];
 
+
+  console.log("pred",prediction);
+  console.log("delta",delta);
+  console.log("beta",beta);
+  console.log("alpha",alpha);
+  console.log("theta",theta);
+  
   return (
     <div className="max-w-7xl mx-auto p-8">
       <h2 className="text-4xl font-bold mb-10">EEG Analysis Results</h2>
