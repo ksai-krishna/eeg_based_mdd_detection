@@ -8,56 +8,31 @@ import {
   Tooltip,
   ResponsiveContainer,
   Brush,
-  ReferenceLine,
 } from "recharts";
 
-type EEGData = {
-  time: number;
-  value: number;
+const sampleRate = 256; // EEG Sampling rate in Hz
+const totalTime = 120; // 120s recording
+const totalSamples = totalTime * sampleRate;
+
+// Generate Simulated EEG Data (Replace with real EEG data)
+const generateEEGData = () => {
+  const channels = ["FP1", "FP2", "C3", "C4"];
+  let data: Record<string, { time: number; value: number }[]> = {};
+  channels.forEach((channel) => (data[channel] = []));
+
+  for (let i = 0; i < totalSamples; i++) {
+    const time = i / sampleRate;
+    data["FP1"].push({ time, value: Math.sin(time * 2) * 5 });
+    data["FP2"].push({ time, value: Math.cos(time * 2) * 5 });
+    data["C3"].push({ time, value: Math.sin(time) * 8 });
+    data["C4"].push({ time, value: Math.cos(time) * 8 });
+  }
+  return data;
 };
 
 const EEGVisualization = () => {
-  const [eegData, setEegData] = useState<EEGData[]>([]);
-  const [channels, setChannels] = useState<string[]>([]);
-  const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [autoScale, setAutoScale] = useState<boolean>(true);
-  const [viewWindow, setViewWindow] = useState<[number, number]>([0, 10]); // Visible time range (default: first 10s)
-
-  useEffect(() => {
-    const fetchEEGData = async () => {
-      // Simulated fetch - replace with actual EEG data loading
-      const sampleRate = 256;
-      const totalTime = 120; // 120s recording
-      const totalSamples = totalTime * sampleRate;
-      let generatedData: Record<string, EEGData[]> = {
-        FP1: [],
-        FP2: [],
-        C3: [],
-        C4: [],
-      };
-
-      for (let i = 0; i < totalSamples; i++) {
-        const time = i / sampleRate;
-        generatedData["FP1"].push({ time, value: Math.sin(time * 2) * 5 });
-        generatedData["FP2"].push({ time, value: Math.cos(time * 2) * 5 });
-        generatedData["C3"].push({ time, value: Math.sin(time) * 8 });
-        generatedData["C4"].push({ time, value: Math.cos(time) * 8 });
-      }
-
-      setChannels(Object.keys(generatedData));
-      setSelectedChannel("FP1");
-      setEegData(generatedData["FP1"]);
-    };
-
-    fetchEEGData();
-  }, []);
-
-  const handleChannelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
-    const selected = event.target.value;
-    setSelectedChannel(selected);
-    setEegData(eegData);
-  };
+  const eegData = generateEEGData();
+  const [viewWindow, setViewWindow] = useState<[number, number]>([0, 10]); // View 10s window
 
   const moveTime = (direction: "left" | "right") => {
     setViewWindow(([start, end]) => {
@@ -72,93 +47,48 @@ const EEGVisualization = () => {
     <div className="bg-white rounded-xl shadow-lg p-4 relative">
       <h3 className="text-lg font-semibold mb-4">EEG Signal Visualization</h3>
 
-      {error && <p className="text-red-500">{error}</p>}
-
-      <div className="relative w-full h-[500px]">
-        {/* Controls (Top Right) */}
-        <div className="absolute top-2 right-2 z-10 flex gap-2">
-          <select
-            className="px-3 py-1 text-xl border rounded-md bg-white shadow"
-            value={selectedChannel || ""}
-            onChange={handleChannelChange}
-          >
-            {channels.map((channel) => (
-              <option key={channel} value={channel}>
-                {channel}
-              </option>
-            ))}
-          </select>
-
-          <button
-            className={`px-2 py-1 text-lg rounded-md ${
-              autoScale ? "bg-blue-500 text-white" : "bg-gray-300 text-black"
-            }`}
-            onClick={() => setAutoScale(!autoScale)}
-          >
-            Auto-Scale: {autoScale ? "ON" : "OFF"}
-          </button>
+      {/* EEG Plots for Each Channel */}
+      {Object.keys(eegData).map((channel, index) => (
+        <div key={channel} className="mb-4">
+          <h4 className="text-md font-semibold text-gray-600">{channel}</h4>
+          <ResponsiveContainer width="100%" height={120}>
+            <LineChart data={eegData[channel]} margin={{ top: 10, right: 30, bottom: 10, left: 50 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" domain={viewWindow} type="number" hide={index !== 3} />
+              <YAxis domain={["auto", "auto"]} hide />
+              <Tooltip />
+              <Line type="monotone" dataKey="value" stroke="#6366f1" dot={false} strokeWidth={1.5} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
+      ))}
 
-        {/* Time Navigation Buttons */}
-        {/* <div className="absolute bottom-2 left-2 z-10 flex gap-2"> */}
-
-        {/* <div style={{ marginTop: "30px", textAlign: "center", display: "flex", justifyContent: "center", gap: "20px" }}>
-          <button onClick={() => moveTime("left")} className="px-4 py-2 bg-gray-300 rounded-md">◀ Left</button>
-          <button onClick={() => moveTime("right")} className="px-4 py-2 bg-gray-300 rounded-md">Right ▶</button>
-        </div> */}
-
-
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={eegData}
-            margin={{ top: 20, right: 30, bottom: 80, left: 50 }} // ⬅ Increases bottom margin
+      {/* Brush for Zooming */}
+      <div className="mt-4">
+        <ResponsiveContainer width="100%" height={50}>
+          <LineChart data={eegData["FP1"]}
+            margin={{ top: 10, right: 30, bottom: 40, left: 50 }}
           >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-              dataKey="time"
-              domain={viewWindow}
-              type="number"
-              label={{
-                value: "Time (s)",
-                position: "insideBottom",
-                offset: -10, // Moves label slightly up
-              }}
-              tickMargin={40} // ⬅ Adds space between ticks & Brush
-            />
 
-            <YAxis
-              label={{ value: "Amplitude (µV)", angle: -90, position: "insideLeft", offset: -10 }}
-              domain={autoScale ? ["auto", "auto"] : [-10, 10]} // Auto or fixed scale
-            />
-            <Tooltip />
-            <Line type="monotone" dataKey="value" stroke="#6366f1" dot={false} strokeWidth={2} />
-
-            {/* Zoomable Brush */}
-            {/* <div style={{ paddingTop: 10 }}> ⬅ Pushes Brush down */}
-              
+            <XAxis dataKey="time" domain={viewWindow} type="number" />
             <Brush
-    dataKey="time"
-    height={25} // ⬅ Adjust brush size if needed
-    stroke="#6366f1"
-    startIndex={viewWindow[0] * 256}
-    endIndex={viewWindow[1] * 256}
-    y={435} // ⬅ Moves brush DOWN
-    onChange={(range) => {
-      if (range) setViewWindow([range.startIndex / 256, range.endIndex / 256]);
-    }}
-  />
-
-
-
-            {/* </div> */}
-
-
-
-
-            {/* Zero Reference Line */}
-            <ReferenceLine y={0} stroke="red" strokeDasharray="3 3" />
+              dataKey="time"
+              height={30}
+              stroke="#6366f1"
+              startIndex={viewWindow[0] * 256}
+              endIndex={viewWindow[1] * 256}
+              onChange={(range) => {
+                if (range) setViewWindow([range.startIndex / 256, range.endIndex / 256]);
+              }}
+            />
           </LineChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Time Navigation Buttons */}
+      <div className="mt-6 flex justify-center gap-4">
+        <button onClick={() => moveTime("left")} className="px-4 py-2 bg-gray-300 rounded-md">◀ Left</button>
+        <button onClick={() => moveTime("right")} className="px-4 py-2 bg-gray-300 rounded-md">Right ▶</button>
       </div>
     </div>
   );
