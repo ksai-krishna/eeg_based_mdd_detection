@@ -42,7 +42,10 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 vhdr_path=""
 
 # Load trained model
-MODEL_PATH = "mw/svm_model.pkl"
+# MODEL_PATH = "mw/svm_model.pkl"
+
+MODEL_PATH = "mw/random_forest_model.pkl"
+
 try:
     model = joblib.load(MODEL_PATH)  # Load .pkl model
 except Exception as e:

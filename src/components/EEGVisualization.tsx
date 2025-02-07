@@ -1,6 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import WaveSurfer from 'wavesurfer.js';
+import React, { useState, useEffect } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Brush,
+  ReferenceLine,
+} from "recharts";
 
 type EEGData = {
   time: number;
@@ -8,159 +17,148 @@ type EEGData = {
 };
 
 const EEGVisualization = () => {
-  const [activeTab, setActiveTab] = useState<'timeSeries' | 'spectrogram'>('timeSeries');
   const [eegData, setEegData] = useState<EEGData[]>([]);
-  const wavesurferRef = useRef<WaveSurfer | null>(null);
+  const [channels, setChannels] = useState<string[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  
+  const [autoScale, setAutoScale] = useState<boolean>(true);
+  const [viewWindow, setViewWindow] = useState<[number, number]>([0, 10]); // Visible time range (default: first 10s)
 
   useEffect(() => {
-    const fetchFilePath = async () => {
-      try {
-        const response = await fetch('http://localhost:5000/get_latest_file');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        return data.latest_vhdr_path;
-      } catch (err) {
-        console.error("Error fetching file path:", err);
-        setError("Error fetching file path from server.");
-        return null;
+    const fetchEEGData = async () => {
+      // Simulated fetch - replace with actual EEG data loading
+      const sampleRate = 256;
+      const totalTime = 120; // 120s recording
+      const totalSamples = totalTime * sampleRate;
+      let generatedData: Record<string, EEGData[]> = {
+        FP1: [],
+        FP2: [],
+        C3: [],
+        C4: [],
+      };
+
+      for (let i = 0; i < totalSamples; i++) {
+        const time = i / sampleRate;
+        generatedData["FP1"].push({ time, value: Math.sin(time * 2) * 5 });
+        generatedData["FP2"].push({ time, value: Math.cos(time * 2) * 5 });
+        generatedData["C3"].push({ time, value: Math.sin(time) * 8 });
+        generatedData["C4"].push({ time, value: Math.cos(time) * 8 });
       }
+
+      setChannels(Object.keys(generatedData));
+      setSelectedChannel("FP1");
+      setEegData(generatedData["FP1"]);
     };
 
-    const loadEEGData = async (filePath: string | null) => {
-      if (!filePath) return; // Don't proceed if file path is null
-
-      const fullPath = `uploads/${filePath}`;
-      try {
-        const response = await fetch(fullPath);
-        if (!response.ok) {
-            if (response.status === 404) {
-                throw new Error(`File not found: ${fullPath}`);
-            } else {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-        }
-
-        const text = await response.text();
-        const parsedData = parseVHDR(text);
-        setEegData(parsedData);
-        setError(null); // Clear any previous errors
-      } catch (error) {
-        console.error('Error loading EEG data:', error);
-        setEegData([]);
-        setError("File was not found or corrupted."); // Set the error message
-      }
-    };
-
-    fetchFilePath().then(loadEEGData); // Chain promises
+    fetchEEGData();
   }, []);
 
-
-
-  useEffect(() => {
-    if (eegData.length > 0 && activeTab === 'spectrogram') {
-      if (wavesurferRef.current) {
-        wavesurferRef.current.destroy();
-      }
-
-      const wavesurfer = WaveSurfer.create({
-        container: '#spectrogramContainer',
-        waveColor: '#6366f1',
-        progressColor: '#4e73df',
-        height: 150,
-        responsive: true,
-        plugins: [
-          WaveSurfer.plugins.spectrogram.create({
-            container: '#spectrogramContainer',
-            labels: true,
-          }),
-        ],
-      });
-
-      const audioBuffer = createAudioBufferFromEEGData(eegData);
-      wavesurfer.loadDecodedBuffer(audioBuffer);
-      wavesurferRef.current = wavesurfer;
-    }
-  }, [eegData, activeTab]);
-
-
-  const createAudioBufferFromEEGData = (data: EEGData[]) => {
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const sampleRate = 256;
-    const length = data.length;
-    const buffer = audioContext.createBuffer(1, length, sampleRate);
-    const channelData = buffer.getChannelData(0);
-
-    data.forEach((point, index) => {
-      channelData[index] = point.value;
-    });
-
-    return buffer;
+  const handleChannelChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const selected = event.target.value;
+    setSelectedChannel(selected);
+    setEegData(eegData);
   };
 
-  const parseVHDR = (text: string): EEGData[] => {
-    const lines = text.split('\n');
-    let samplingInterval = 1;
-    let data: EEGData[] = [];
-
-    lines.forEach((line) => {
-      if (line.startsWith('SamplingInterval=')) {
-        samplingInterval = parseFloat(line.split('=')[1]) / 1000;
-      }
+  const moveTime = (direction: "left" | "right") => {
+    setViewWindow(([start, end]) => {
+      const shift = 5; // Move by 5 seconds
+      return direction === "left"
+        ? [Math.max(0, start - shift), Math.max(10, end - shift)]
+        : [start + shift, end + shift];
     });
-
-    // Placeholder for actual data parsing.  This is where you'd parse the .vhdr
-    // and .eeg files.  For now, generating mock data.  You'll need to
-    // implement the real parsing logic here.
-    for (let i = 0; i < 1000; i++) {
-      data.push({
-        time: i * samplingInterval,
-        value: Math.sin(i * 0.1) * Math.cos(i * 0.05) + Math.random() * 5,
-      });
-    }
-
-    return data;
   };
-
-  const renderTimeSeries = () => (
-    <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={eegData} margin={{ top: 20, right: 30, bottom: 20, left: 40 }}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="time" label={{ value: 'Time (s)', position: 'bottom', offset: 0 }} />
-        <YAxis label={{ value: 'Amplitude (µV)', angle: -90, position: 'left', offset: 0 }} />
-        <Tooltip />
-        <Line type="monotone" dataKey="value" stroke="#6366f1" dot={false} strokeWidth={2} />
-        </LineChart>
-    </ResponsiveContainer>
-  );
-
-  const renderSpectrogram = () => (
-    <div id="spectrogramContainer" className="h-full w-full flex items-center justify-center"></div>
-  );
 
   return (
-    <div className="bg-white rounded-xl shadow-lg p-8">
-      <h3 className="text-xl font-semibold mb-6">EEG Signal Visualization</h3>
+    <div className="bg-white rounded-xl shadow-lg p-4 relative">
+      <h3 className="text-lg font-semibold mb-4">EEG Signal Visualization</h3>
 
-      <div className="flex gap-4 mb-6">
-        <button
-          className={`px-6 py-3 rounded-lg ${activeTab === 'timeSeries' ? 'bg-gray-200 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}
-          onClick={() => setActiveTab('timeSeries')}
-        >
-          Time Series
-        </button>
-      </div>
+      {error && <p className="text-red-500">{error}</p>}
 
-      {error && <p className="text-red-500">{error}</p>} {/* Display error message */}
-      <div className="h-[500px]">
-        {eegData.length > 0 ? (
-          activeTab === 'timeSeries' ? renderTimeSeries() : renderSpectrogram()
-        ) : !error ? (
-          <p>Loading EEG Data...</p> // Show loading message if no error and no data
-        ) : null}
+      <div className="relative w-full h-[500px]">
+        {/* Controls (Top Right) */}
+        <div className="absolute top-2 right-2 z-10 flex gap-2">
+          <select
+            className="px-3 py-1 text-xl border rounded-md bg-white shadow"
+            value={selectedChannel || ""}
+            onChange={handleChannelChange}
+          >
+            {channels.map((channel) => (
+              <option key={channel} value={channel}>
+                {channel}
+              </option>
+            ))}
+          </select>
+
+          <button
+            className={`px-2 py-1 text-lg rounded-md ${
+              autoScale ? "bg-blue-500 text-white" : "bg-gray-300 text-black"
+            }`}
+            onClick={() => setAutoScale(!autoScale)}
+          >
+            Auto-Scale: {autoScale ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        {/* Time Navigation Buttons */}
+        {/* <div className="absolute bottom-2 left-2 z-10 flex gap-2"> */}
+
+        {/* <div style={{ marginTop: "30px", textAlign: "center", display: "flex", justifyContent: "center", gap: "20px" }}>
+          <button onClick={() => moveTime("left")} className="px-4 py-2 bg-gray-300 rounded-md">◀ Left</button>
+          <button onClick={() => moveTime("right")} className="px-4 py-2 bg-gray-300 rounded-md">Right ▶</button>
+        </div> */}
+
+
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart
+            data={eegData}
+            margin={{ top: 20, right: 30, bottom: 80, left: 50 }} // ⬅ Increases bottom margin
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="time"
+              domain={viewWindow}
+              type="number"
+              label={{
+                value: "Time (s)",
+                position: "insideBottom",
+                offset: -10, // Moves label slightly up
+              }}
+              tickMargin={40} // ⬅ Adds space between ticks & Brush
+            />
+
+            <YAxis
+              label={{ value: "Amplitude (µV)", angle: -90, position: "insideLeft", offset: -10 }}
+              domain={autoScale ? ["auto", "auto"] : [-10, 10]} // Auto or fixed scale
+            />
+            <Tooltip />
+            <Line type="monotone" dataKey="value" stroke="#6366f1" dot={false} strokeWidth={2} />
+
+            {/* Zoomable Brush */}
+            {/* <div style={{ paddingTop: 10 }}> ⬅ Pushes Brush down */}
+              
+            <Brush
+    dataKey="time"
+    height={25} // ⬅ Adjust brush size if needed
+    stroke="#6366f1"
+    startIndex={viewWindow[0] * 256}
+    endIndex={viewWindow[1] * 256}
+    y={435} // ⬅ Moves brush DOWN
+    onChange={(range) => {
+      if (range) setViewWindow([range.startIndex / 256, range.endIndex / 256]);
+    }}
+  />
+
+
+
+            {/* </div> */}
+
+
+
+
+            {/* Zero Reference Line */}
+            <ReferenceLine y={0} stroke="red" strokeDasharray="3 3" />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
