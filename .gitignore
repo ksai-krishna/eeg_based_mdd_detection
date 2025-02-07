@@ -7,12 +7,15 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+
+__pycache__
 .bolt
 uploads
 node_modules
 dist
 dist-ssr
 *.local
+mw
 
 # Editor directories and files
 .vscode/*
