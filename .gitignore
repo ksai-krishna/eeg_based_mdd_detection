@@ -15,7 +15,8 @@ node_modules
 dist
 dist-ssr
 *.local
-mw
+model_weights
+static
 
 # Editor directories and files
 .vscode/*
