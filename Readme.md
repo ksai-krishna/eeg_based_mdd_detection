@@ -4,20 +4,20 @@
 ## Here Were using Training Traditional ML algorithms to predict if a person is having MDD or not
 
 ## Steps to install
-### install node.js
-### install all required node modules 
+### Step 1 install node.js
+### Step 2 install all required node modules 
 ```
 node install
 ```
-### install all requirements
+### Step 3 install all requirements
 ```
 pip install -r requirements.txt
 ```
-### Run this command To start the api server
+### Step 4 Run this command To start the api server
 ```
 uvicorn app:app --host 0.0.0.0 --port 5000
 ```
-### Then run start react app
+### Step 5 Then run start react app
 ```
 node run dev
 ```
