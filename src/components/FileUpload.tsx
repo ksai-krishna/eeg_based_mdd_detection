@@ -6,7 +6,42 @@ import { useNavigate } from "react-router-dom";
 import { usePrediction } from '../context/PredictionContext';
 
 
+//****************** Simple summary about the each code block ******************//
 
+// 1. Importing the necessary hooks and components
+// 2. Creating a functional component called FileUpload
+// 3. Destructure the setFiles function from the UploadContext
+// 4. Creating the following states:
+//    - dragActive: boolean to track whether a file is being dragged
+//    - uploadedFiles: File[] to store the uploaded files
+//    - error: string | null to store any error messages
+//    - isUploading: boolean to track the upload status
+//    - showFileTypeError: boolean to show/hide the file type error message
+// 5. A function called handleDrag to handle drag events
+// 6. A function called validateFileLimit to check the number of files
+// 7. A function called validateFiles to check the file extensions
+// 8. A function called handleDrop to handle the drop event
+// 9. A function called handleChange to handle file input changes
+//10. A function called handleSubmit to upload the files
+//11. A function called removeFile to remove a file from the list
+//12. A function called clearAllFiles to remove all files from the list
+//13. A function called downloadFile to download a file
+//14. Return the JSX code for the FileUpload component
+//15. Add drag and drop functionality to the file upload area
+//16. Add the file input element to select files
+//17. Add a label to show drag and drop instructions
+//18. Show an error message if the file type is incorrect
+//19. Show the list of uploaded files with options to remove and download
+//20. Add a button to clear all files
+//21. Add a button to upload the files
+
+//********************************************************************************//
+
+
+
+
+// Note : To change which files are required, update the requiredExtensions array in the validateFiles function. like here we have .vhdr, .vmrk, .eeg files
+//  so we can either remove or add new extensions to the array
 
 
 
@@ -40,7 +75,7 @@ const FileUpload = () => {
   };
 
   const validateFiles = (files: File[]) => {
-    const requiredExtensions = ['.vhdr', '.vmrk', '.eeg'];
+    const requiredExtensions = ['.vhdr', '.vmrk', '.eeg'];  // Required file extensions
     const uploadedExtensions = files.map(file => 
       '.' + file.name.split('.').pop()?.toLowerCase()
     );
