@@ -6,6 +6,8 @@ import { usePrediction } from '../context/PredictionContext';
 
 
 const PredictionResults = () => {
+
+
   const [activeTab, setActiveTab] = useState('timeSeries');
   const { prediction,delta, theta, alpha, beta } = usePrediction(); 
 console.log("Extracted Prediction:", prediction);

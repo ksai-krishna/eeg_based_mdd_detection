@@ -12,7 +12,13 @@ from mne.time_frequency import psd_array_welch
 import shutil
 from flask_cors import CORS
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+import matplotlib.pyplot as plt
 
+
+import mne
+import numpy as np
+import pandas as pd
 
 
 
@@ -28,14 +34,20 @@ origins = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Allows specific origins
+    allow_origins=["*"],  # Allow all origins (or specify allowed origins)
     allow_credentials=True,
-    allow_methods=["*"],  # Allows all HTTP methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
+    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allow all headers
 )
 
 
+
+
+
 # CORS(app)
+
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 # Directory for storing uploaded files
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -44,7 +56,7 @@ vhdr_path=""
 # Load trained model
 # MODEL_PATH = "mw/svm_model.pkl"
 
-MODEL_PATH = "mw/random_forest_model.pkl"
+MODEL_PATH = "model_weights/random_forest_model.pkl"
 
 try:
     model = joblib.load(MODEL_PATH)  # Load .pkl model
@@ -53,12 +65,14 @@ except Exception as e:
 
 # Store predictions
 predictions = []
+plot_paths = []
 
-def preprocess_and_extract_features(vhdr_path, vmrk_path, eeg_path):
-    """Preprocess EEG files and extract features."""
+
+def preprocess_eeg(vhdr_path, vmrk_path, eeg_path):
+    """Preprocess EEG files."""
     print(f"Processing file: {vhdr_path}")
     raw = mne.io.read_raw_brainvision(vhdr_path, preload=True)
-
+    file_path = os.path.splitext(os.path.basename(vhdr_path))[0]
     start_t = 30
     total_time = raw.times[-1]
     max_time = total_time - start_t
@@ -85,15 +99,20 @@ def preprocess_and_extract_features(vhdr_path, vmrk_path, eeg_path):
 
     ica.exclude = list(artifact_components)
     raw_clean = ica.apply(raw)
+    plot_path=f"static/{file_path}.png"
+    fig = raw_clean.plot(scalings={"eeg": 75e-6}, n_channels=32, title="EEG Data", show=True)
+    fig.savefig(plot_path, dpi=300)
+    plt.close(fig)
+    return raw_clean
 
-    events = mne.make_fixed_length_events(raw_clean, duration=2.0)
+def preprocess_and_return_epochs(vhdr_path, vmrk_path, eeg_path):
+    """Preprocess EEG files and return epochs"""
+    raw_clean = preprocess_eeg(vhdr_path, vmrk_path, eeg_path)
+
+    events = mne.make_fixed_length_events(raw_clean, duration=2.0) # Create events of 2 seconds duration
     epochs = mne.Epochs(raw_clean, events, tmin=0, tmax=2.0, baseline=None, preload=True)
     
     return epochs
-
-
-
-
 
 def freq_domain_features(epochs):
     """Extract features from EEG epochs."""
@@ -122,7 +141,7 @@ def freq_domain_features(epochs):
 
 
 def extract_features_from_epochs(epochs):
-    """Extract features from EEG epochs."""
+    """Extract features from each EEG epochs."""
     data = epochs.get_data()
 
     mean = np.mean(data, axis=2)
@@ -140,6 +159,17 @@ def extract_features_from_epochs(epochs):
     # print("*****************freq feature ***************************",freq_features)
     # print("*****************time feature ***************************",time_features)
     return np.concatenate([time_features, freq_features], axis=1)
+
+
+def visualize_eeg_data(vhdr_path, vmrk_path, eeg_path):
+    """Visualize EEG data."""
+# Convert to Pandas DataFrame
+    raw = preprocess_eeg(vhdr_path, vmrk_path, eeg_path)
+    df = raw.to_data_frame()
+
+    # Save as JSON for React
+    df.to_json("eeg_data.json", orient="records")
+    return df
 
 @app.post("/upload/")
 async def upload_files(
@@ -177,7 +207,7 @@ async def predict(request: Request):
 
     # Process the EEG files (replace with your own function)
     
-    epochs = preprocess_and_extract_features(vhdr_full_path, vmrk_full_path, eeg_full_path)
+    epochs = preprocess_and_return_epochs(vhdr_full_path, vmrk_full_path, eeg_full_path)
     features = extract_features_from_epochs(epochs)
     delta,theta,alpha,beta = freq_domain_features(epochs)
     # Make prediction (replace with your model logic)
@@ -187,12 +217,9 @@ async def predict(request: Request):
 
     # Append prediction result to the list (optional)
     predictions.append({"files": [vhdr_path, vmrk_path, eeg_path], "prediction": result})
-
     # Return the prediction as a JSON response
     print(delta,theta,alpha,beta)
     print("************************************")
-
-
 
     return {"prediction": result,"delta": f"{delta:.5e}","theta": f"{theta:.5e}","alpha": f"{alpha:.5e}","beta": f"{beta:5e}"}
 
@@ -201,8 +228,8 @@ async def get_predictions():
     """Retrieve all past predictions."""
     return {"predictions": predictions}
 
-@app.get("/get_latest_file")
-async def get_latest_file():
+@app.get("/get_latest_vhdr_file")
+async def get_latest_vhdr_file():
     """Retrieve the latest uploaded vhdr file path from the predictions."""
     if not predictions:
         raise HTTPException(status_code=404, detail="No predictions available")
@@ -212,4 +239,4 @@ async def get_latest_file():
 
     return {"latest_vhdr_path": latest_vhdr_path}
 
-##### uvicorn app:app --host 0.0.0.0 --port 5000
+##### uvicorn app:app --host 0.0.0.0 --port 5000  ## Command to run the api server/app
