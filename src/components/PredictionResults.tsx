@@ -37,7 +37,7 @@ console.log("Type of Prediction:", typeof prediction);
           <h3 className="text-2xl font-semibold mb-6">Prediction Result</h3>
           <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl p-8 text-center">
             <div className="flex justify-center mb-6">
-              <Brain className="h-20 w-20 text-white" />
+              <Brain className="h-20 w-20 text-white" /> {/* Brain Icon could also change to get a specific icon based on prediction result*/} 
             </div>
             <div className="text-4xl font-bold text-white mb-3">{prediction}</div>
           </div>
