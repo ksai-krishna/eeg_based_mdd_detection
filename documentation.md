@@ -99,3 +99,6 @@ static/<vhdr_filename>.png
 }
 ```
 - This allows users to see their history of analyzed EEG files.
+
+# Illustration
+![Project-Workflow](images/workflow.svg)
