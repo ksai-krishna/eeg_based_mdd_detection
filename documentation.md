@@ -85,7 +85,7 @@ static/<vhdr_filename>.png
 ```
 - The frontend requests this image and displays it in the PredictionResults.tsx page.
 
-## **Retrieving Past Predictions (`/prediction/`)
+## **Retrieving Past Predictions (`/prediction/`)**
 - The frontend calls `/prediction` api endpoint to fetch past predictions and display them in the UI.
 - The response might look like this:
 ```json
@@ -97,5 +97,5 @@ static/<vhdr_filename>.png
     }
   ]
 }
-
+```
 - This allows users to see their history of analyzed EEG files.
