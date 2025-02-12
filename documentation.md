@@ -50,13 +50,13 @@ final_year_project
 ## **Backend**
 ### Here we have fastapi with flask backend framework
 ### fastapi : Main backend framework for handling API requests
-### mne : To load / clean the eeg data or all eeg data handling.
+### mne : To load and clean the eeg data or all eeg data handling.
 ### joblib - To load saved models,matploitlib - for eeg visulization (plots)
 ### uvicorn : its a ASGI server where we can run the FastAPI application
-
+---
 ## **How they both are interconnected (FastApi and React)**
-## **1. Uploading Files (Triggering `/upload/`)**  
-- In the **Upload Page**, when the user clicks the "Upload Files" button, a **POST** request is sent to **`/upload/`** with `.vhdr`, `.vmrk`, and `.eeg` files.  
+### **1. Uploading Files (Triggering `/upload/`)**
+- In the **Upload Page**, when the user clicks the "Upload Files" button, a **POST** request is sent to **`/upload/`** with `.vhdr`, `.vmrk`, and `.eeg` files.
 - The backend **stores the uploaded files** in the `uploads/` directory.  
 - The backend responds with:  
   ```json
@@ -70,25 +70,25 @@ final_year_project
 - The frontend stores these file paths using React Context API for later use.
 
 
-## **Triggering EEG Processing & Prediction (`/predict`)**
--- Once files are uploaded, the frontend sends a GET request to /predict?vhdr=<path>&vmrk=<path>&eeg=<path>
--- The backend:
-    -- Loads the EEG files.
-    -- Cleans the data using MNE (ICA, filtering, artifact removal).
-    -- Extracts features (delta, theta, alpha, beta).
-    -- Passes the features to the machine learning model (random_forest_model.pkl).
-    -- Returns a prediction (Healthy / MDD) along with EEG feature values.
-## **Rendering the EEG Visualization**
--- After prediction, the backend saves the cleaned EEG plot as an image:
+### **Triggering EEG Processing & Prediction (`/predict`)**
+- Once files are uploaded, the frontend sends a GET request to /predict?vhdr=<path>&vmrk=<path>&eeg=<path>
+- The backend:
+    + Loads the EEG files.
+    + Cleans the data using MNE (ICA, filtering, artifact removal).
+    + Extracts features (delta, theta, alpha, beta).
+    + Passes the features to the machine learning model (random_forest_model.pkl).
+    + Returns a prediction (Healthy / MDD) along with EEG feature values.
+### **Rendering the EEG Visualization**
+- After prediction, the backend saves the cleaned EEG plot as an image:
 ```
 static/<vhdr_filename>.png
 ```
--- The frontend requests this image and displays it in the PredictionResults.tsx page.
+- The frontend requests this image and displays it in the PredictionResults.tsx page.
 
 ## **Retrieving Past Predictions (`/prediction/`)
--- The frontend calls `/prediction` api endpoint to fetch past predictions and display them in the UI.
--- The response might look like this:
-```
+- The frontend calls `/prediction` api endpoint to fetch past predictions and display them in the UI.
+- The response might look like this:
+```json
 {
   "predictions": [
     {
@@ -97,5 +97,5 @@ static/<vhdr_filename>.png
     }
   ]
 }
-```
--- This allows users to see their history of analyzed EEG files.
+
+- This allows users to see their history of analyzed EEG files.
