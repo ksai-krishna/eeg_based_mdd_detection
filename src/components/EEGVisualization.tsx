@@ -18,9 +18,10 @@ const EEGVisualization = () => {
         const vhdr_path = fileData.latest_vhdr_path;
         console.log("Latest EEG file path:", vhdr_path);
         // Step 2: Get the image path for the EEG visualization
-        // const plot_path = vhdr_path.replace(".vhdr", "_plot.png");
+        const plot_path = vhdr_path.replace(".vhdr", ".png");
         // Step 3: Set the image URL (assuming the image is served statically)
-        const imageUrl = "http://localhost:5000/static/plot.png"; // Updated path
+        const imageUrl = `http://localhost:5000/static/${plot_path}`; // Update the URL if the image is served from a different location
+        console.log("Latest EEG file path:", imageUrl);
         setImageUrl(imageUrl);
         setLoading(false);
       } catch (err) {
