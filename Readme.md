@@ -6,12 +6,20 @@
 ## Steps to install
 ### install node.js
 ### install all required node modules 
-```node install```
+```
+node install
+```
 ### install all requirements
-```pip install -r requirements.txt```
+```
+pip install -r requirements.txt
+```
 ### Run this command To start the api server
-``` uvicorn app:app --host 0.0.0.0 --port 5000 ```
+```
+uvicorn app:app --host 0.0.0.0 --port 5000
+```
 ### Then run start react app
-``` node run dev ```
+```
+node run dev
+```
 
 # 🚧🚧 Work Under Progress 🚧🚧
