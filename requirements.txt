@@ -7,5 +7,5 @@ joblib
 pickle5
 matplotlib
 pandas
-pywt
+PyWavelets
 flask-cors
