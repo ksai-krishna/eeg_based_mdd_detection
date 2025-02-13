@@ -1,5 +1,4 @@
 __pycache__/
 uploads
-node_modules
-model_weights
+node_modules/
 static
