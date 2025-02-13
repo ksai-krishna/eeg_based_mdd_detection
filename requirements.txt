@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+numpy
+mne
+scipy
+joblib
+pickle5
+matplotlib
+pandas
+pywt
+flask-cors
