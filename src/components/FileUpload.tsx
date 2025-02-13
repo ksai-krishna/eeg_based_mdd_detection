@@ -66,7 +66,7 @@ const FileUpload = () => {
   }, []);
 
   const validateFileLimit = (files: File[]) => {
-    if (files.length > 3) {
+    if (files.length > 6) {
       setError("Please remove some files in the queue. Only 3 files are allowed.");
       setTimeout(() => setError(null), 5000);
       return false;
@@ -123,14 +123,11 @@ const FileUpload = () => {
   const handleSubmit = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     setIsUploading(true);
-    // const navigate = useNavigate();
+    
     // Validate if the uploaded files are the correct ones
     const missingExtensions = validateFiles(uploadedFiles);
-    var vhdr = ""
-    var vmrk = ""
-    var eeg = ""
     if (missingExtensions) {
-      setError(`Missing required files: ${missingExtensions.join(', ')}`);
+      setError(`Missing required files: ${missingExtensions.join(", ")}`);
       setShowFileTypeError(true);
       setTimeout(() => {
         setError(null);
@@ -139,48 +136,67 @@ const FileUpload = () => {
       setIsUploading(false);
       return;
     }
-
+  
     try {
-      // Prepare FormData to send files to backend
       const formData = new FormData();
-
-      // Map the files to the correct names ('vhdr', 'vmrk', 'eeg')
+      
+      // Initialize variables for filenames
+      let vhdrEO = "", vmrkEO = "", eegEO = "";
+      let vhdrEC = "", vmrkEC = "", eegEC = "";
+  
+      // Map files based on naming convention
       uploadedFiles.forEach(file => {
-        if (file.name.includes('.vhdr')) {
-          formData.append('vhdr', file);  // Attach the .vhdr file under 'vhdr'
-          vhdr=file.name
-        } else if (file.name.includes('.vmrk')) {
-          formData.append('vmrk', file);  // Attach the .vmrk file under 'vmrk'
-          vmrk = file.name
-        } else if (file.name.includes('.eeg')) {
-          formData.append('eeg', file);  // Attach the .eeg file under 'eeg'
-          eeg = file.name
+        const fileName = file.name;
+  
+        if (fileName.includes("restEO") && fileName.endsWith(".vhdr")) {
+          formData.append("vhdrEO", file);
+          vhdrEO = fileName;
+        } else if (fileName.includes("restEO") && fileName.endsWith(".vmrk")) {
+          formData.append("vmrkEO", file);
+          vmrkEO = fileName;
+        } else if (fileName.includes("restEO") && fileName.endsWith(".eeg")) {
+          formData.append("eegEO", file);
+          eegEO = fileName;
+        } else if (fileName.includes("restEC") && fileName.endsWith(".vhdr")) {
+          formData.append("vhdrEC", file);
+          vhdrEC = fileName;
+        } else if (fileName.includes("restEC") && fileName.endsWith(".vmrk")) {
+          formData.append("vmrkEC", file);
+          vmrkEC = fileName;
+        } else if (fileName.includes("restEC") && fileName.endsWith(".eeg")) {
+          formData.append("eegEC", file);
+          eegEC = fileName;
         }
       });
-
+  
+      // Ensure all required files are present
+      if (!vhdrEO || !vmrkEO || !eegEO || !vhdrEC || !vmrkEC || !eegEC) {
+        setError("Missing required files. Please upload all six files.");
+        setIsUploading(false);
+        return;
+      }
+  
       // Call the FastAPI /upload endpoint
       const response = await axios.post("http://localhost:5000/upload/", formData, {
         headers: {
-          "Content-Type": "multipart/form-data",  // Ensure proper content type for file uploads
+          "Content-Type": "multipart/form-data",
         },
+        withCredentials: true,
       });
-      
-      // Handle response from backend
-      // console.log
-      
+  
       if (response.data) {
         console.log("Files uploaded successfully:", response.data.file_paths);
-        // Optionally you can trigger another API call to process prediction
-        // After the upload, handle prediction logic here...
-
+  
+        // Call the /predict endpoint with the correct filenames
         const pred_response = await axios.get("http://localhost:5000/predict", {
-                params: { vhdr: vhdr,vmrk:vmrk,eeg:eeg },  // Send file path as a query parameter
-              });
-              console.log("Prediction Response:", pred_response.data);
-              console.log("prediction is ",pred_response.data.prediction)
+          params: { vhdrEO, vmrkEO, eegEO, vhdrEC, vmrkEC, eegEC },
+        });
+  
+        console.log("Prediction Response:", pred_response.data);
+        console.log("Prediction is", pred_response.data.prediction);
         setPredictionData(pred_response.data);
-        
-        navigate("/prediction")
+  
+        navigate("/prediction");
       } else {
         throw new Error("Failed to upload files.");
       }
@@ -189,24 +205,8 @@ const FileUpload = () => {
     } finally {
       setIsUploading(false);
     }
-
-    //  catch (error) {
-    //   try {
-    //     const response = await axios.get("http://localhost:5000/run_prediction", {
-    //       params: { path: "uploads/sub-87974973_ses-1_task-restEC_eeg.vhdr" },  // Send file path as a query parameter
-    //     });
-    //     navigate(response.data)
-    //     console.log("Prediction Response:", response.data);
-    //     return response.data;
-    //   } catch (error) {
-    //     console.error("Error getting prediction:", error);
-    //   }
-    //   navigate("/prediction")
-    // } finally {
-    //   setIsUploading(false);
-    // }
-};
-
+  };
+  
 
 
   const removeFile = (indexToRemove: number) => {

@@ -14,11 +14,12 @@ from flask_cors import CORS
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import matplotlib.pyplot as plt
-
-
-import mne
-import numpy as np
 import pandas as pd
+from scipy.fftpack import fft
+import pywt
+
+
+
 
 
 
@@ -56,115 +57,160 @@ vhdr_path=""
 # Load trained model
 # MODEL_PATH = "mw/svm_model.pkl"
 
-MODEL_PATH = "model_weights/random_forest_model.pkl"
-
+MODEL_PATH = "model_weights/rf.pkl"
+Scaler_PATH = "scaler/scaler.pkl"
 try:
     model = joblib.load(MODEL_PATH)  # Load .pkl model
 except Exception as e:
     raise RuntimeError(f"Error loading model: {e}")
+
+
+scaler = joblib.load(Scaler_PATH)  # Only keeping scaler for feature scaling
+
 
 # Store predictions
 predictions = []
 plot_paths = []
 
 
-def preprocess_eeg(vhdr_path, vmrk_path, eeg_path):
-    """Preprocess EEG files."""
-    print(f"Processing file: {vhdr_path}")
-    raw = mne.io.read_raw_brainvision(vhdr_path, preload=True)
-    file_path = os.path.splitext(os.path.basename(vhdr_path))[0]
-    start_t = 30
-    total_time = raw.times[-1]
-    max_time = total_time - start_t
-    raw = raw.crop(start_t, max_time)
 
-    non_eeg_channels = ['VPVA', 'VNVB', 'HPHL', 'HNHR', 'Erbs', 'OrbOcc', 'Mass']
-    raw.drop_channels([ch for ch in non_eeg_channels if ch in raw.info['ch_names']])
 
-    montage = mne.channels.make_standard_montage('standard_1020')
-    raw.set_montage(montage)
-
-    raw.filter(l_freq=1.0, h_freq=40.0)
-
-    ica = ICA(n_components=20, random_state=97, max_iter=800)
+def preprocess_eeg_data(vhdr_file_path, l_freq=1.0, h_freq=40.0, notch_freq=50):
+    """Preprocess EEG data."""
+    raw = mne.io.read_raw_brainvision(vhdr_file_path, preload=True)
+    eog_channels = ['VPVA', 'VNVB', 'HPHL', 'HNHR']
+    raw.set_channel_types({ch: 'eog' for ch in eog_channels if ch in raw.ch_names})
+    raw.notch_filter(freqs=[notch_freq], picks='eeg')
+    raw.filter(l_freq=l_freq, h_freq=h_freq, picks='eeg')
+    raw.set_eeg_reference('average', projection=True)
+    
+    # ICA for artifact removal
+    ica = mne.preprocessing.ICA(n_components=20, random_state=97, max_iter=800)
     ica.fit(raw)
-    sources = ica.get_sources(raw).get_data()
-
-    variances = np.var(sources, axis=1)
-    kurtoses = np.apply_along_axis(lambda x: kurtosis(x, fisher=False), 1, sources)
-
-    high_variance = np.where(variances > np.percentile(variances, 95))[0]
-    high_kurtosis = np.where(kurtoses > np.percentile(kurtoses, 95))[0]
-    artifact_components = np.unique(np.concatenate([high_variance, high_kurtosis]))
-
-    ica.exclude = list(artifact_components)
-    raw_clean = ica.apply(raw)
+    eog_indices, _ = ica.find_bads_eog(raw)
+    ica.exclude = eog_indices
+    raw = ica.apply(raw)
+    file_path = os.path.splitext(os.path.basename(vhdr_file_path))[0]
+    print("**********************************************file_path*****************************************",file_path)
     plot_path=f"static/{file_path}.png"
-    fig = raw_clean.plot(scalings={"eeg": 75e-6}, n_channels=32, title="EEG Data", show=True)
+    print("**********************************************plot_path*****************************************",plot_path)
+    fig = raw.plot(scalings={"eeg": 75e-6}, n_channels=32, title="EEG Data", show=True)
     fig.savefig(plot_path, dpi=300)
     plt.close(fig)
-    return raw_clean
+    return raw
 
-def preprocess_and_return_epochs(vhdr_path, vmrk_path, eeg_path):
-    """Preprocess EEG files and return epochs"""
-    raw_clean = preprocess_eeg(vhdr_path, vmrk_path, eeg_path)
+def extract_features(raw, condition):
+    """Extract EEG features."""
+    raw.pick_types(eeg=True)
+    data = raw.get_data()
+    channel_names = raw.ch_names
+    feature_list = []
 
-    events = mne.make_fixed_length_events(raw_clean, duration=2.0) # Create events of 2 seconds duration
-    epochs = mne.Epochs(raw_clean, events, tmin=0, tmax=2.0, baseline=None, preload=True)
+    for i, ch in enumerate(channel_names):
+        mean_val = np.mean(data[i])
+        variance = np.var(data[i])
+        skewness = skew(data[i])
+        kurtosis_val = kurtosis(data[i])
+        peak_to_peak = np.ptp(data[i])
+
+        # FFT Features
+        fft_values = np.abs(fft(data[i]))
+        fft_mean = np.mean(fft_values)
+        fft_std = np.std(fft_values)
+        fft_max = np.max(fft_values)
+
+        # Wavelet Transform (DWT)
+        coeffs = pywt.wavedec(data[i], 'db4', level=4)
+        wavelet_energy = sum(np.sum(np.square(c)) for c in coeffs)
+        wavelet_entropy = sum(-np.sum((c / np.sum(np.abs(c) + 1e-10)) * np.log2(c / np.sum(np.abs(c) + 1e-10) + 1e-10)) for c in coeffs)
+
+        # Power Spectral Density (PSD)
+        psd = raw.compute_psd(method='welch', fmin=0.5, fmax=50, n_fft=2048)
+        psd_data = psd.get_data()
+        freqs = psd.freqs
+        psd_df = pd.DataFrame(psd_data, columns=freqs, index=channel_names)
+
+        # Extract power in specific frequency bands
+        bands = {
+            "delta": (0.5, 4), "theta": (4, 8), "slow_alpha": (6, 9),
+            "alpha": (8, 12), "beta": (12, 30), "gamma": (30, 50)
+        }
+        band_powers = {band: psd_df.loc[ch, (freqs >= low) & (freqs <= high)].mean() for band, (low, high) in bands.items()}
+
+        # Store extracted features in a list
+        feature_list.append([condition, ch, mean_val, variance, skewness, kurtosis_val, peak_to_peak,
+                             fft_mean, fft_std, fft_max, wavelet_energy, wavelet_entropy,
+                             band_powers['delta'], band_powers['theta'], band_powers['slow_alpha'],
+                             band_powers['alpha'], band_powers['beta'], band_powers['gamma']])
+
+    # Convert to DataFrame
+    columns = ["condition", "channel", "mean", "variance", "skewness", "kurtosis", "peak_to_peak",
+               "fft_mean", "fft_std", "fft_max", "wavelet_energy", "wavelet_entropy",
+               "delta_power", "theta_power", "slow_alpha_power", "alpha_power", "beta_power", "gamma_power"]
     
-    return epochs
+    df = pd.DataFrame(feature_list, columns=columns)
 
-def freq_domain_features(epochs):
-    """Extract features from EEG epochs."""
-    data = epochs.get_data()
+    return df
 
-    mean = np.mean(data, axis=2)
-    variance = np.var(data, axis=2)
-    skewness = skew(data, axis=2)
-    kurtosis_values = kurtosis(data, axis=2)
-    time_features = np.concatenate([mean, variance, skewness, kurtosis_values], axis=1)
+def predict_eeg(vhdr_file_eo, vhdr_file_ec):
+    """Predict EEG data using trained model."""
+    # Process EO and EC files
+    raw_eo = preprocess_eeg_data(vhdr_file_eo)
+    raw_ec = preprocess_eeg_data(vhdr_file_ec)
 
-    psd, freqs = psd_array_welch(data, sfreq=epochs.info['sfreq'], fmin=1, fmax=40, n_fft=256)
-    delta = np.mean(psd[:, :, (freqs >= 1) & (freqs < 4)], axis=2)
-    theta = np.mean(psd[:, :, (freqs >= 4) & (freqs < 8)], axis=2)
-    alpha = np.mean(psd[:, :, (freqs >= 8) & (freqs < 13)], axis=2)
-    beta = np.mean(psd[:, :, (freqs >= 13) & (freqs < 30)], axis=2)
-    delta_mean = np.mean(delta)
-    theta_mean = np.mean(theta)
-    alpha_mean = np.mean(alpha)
-    beta_mean = np.mean(beta)
-
-    # freq_features = np.concatenate([delta, theta, alpha, beta], axis=1)
-    # print("*****************freq feature ***************************",freq_features)
-    # print("*****************time feature ***************************",time_features)
-    return delta_mean,theta_mean,alpha_mean,beta_mean
+    features_eo = extract_features(raw_eo, "EO")
+    features_ec = extract_features(raw_ec, "EC")
 
 
-def extract_features_from_epochs(epochs):
-    """Extract features from each EEG epochs."""
-    data = epochs.get_data()
+    # Combine EO and EC features
+    combined_features = pd.concat([features_eo, features_ec])
 
-    mean = np.mean(data, axis=2)
-    variance = np.var(data, axis=2)
-    skewness = skew(data, axis=2)
-    kurtosis_values = kurtosis(data, axis=2)
-    time_features = np.concatenate([mean, variance, skewness, kurtosis_values], axis=1)
+    # Save original columns
+    original_columns = combined_features.columns
 
-    psd, freqs = psd_array_welch(data, sfreq=epochs.info['sfreq'], fmin=1, fmax=40, n_fft=256)
-    delta = np.mean(psd[:, :, (freqs >= 1) & (freqs < 4)], axis=2)
-    theta = np.mean(psd[:, :, (freqs >= 4) & (freqs < 8)], axis=2)
-    alpha = np.mean(psd[:, :, (freqs >= 8) & (freqs < 13)], axis=2)
-    beta = np.mean(psd[:, :, (freqs >= 13) & (freqs < 30)], axis=2)
-    freq_features = np.concatenate([delta, theta, alpha, beta], axis=1)
-    # print("*****************freq feature ***************************",freq_features)
-    # print("*****************time feature ***************************",time_features)
-    return np.concatenate([time_features, freq_features], axis=1)
+    # Drop non-numeric columns (condition, channel) before scaling
+    X = combined_features.drop(columns=["condition", "channel"])
+
+    # Ensure correct feature order (match training order)
+    expected_features = scaler.feature_names_in_  # Get features used during training
+    missing_features = [col for col in expected_features if col not in X.columns]
+    extra_features = [col for col in X.columns if col not in expected_features]
+
+    # Fill missing features with 0
+    for col in missing_features:
+        X[col] = 0
+
+    # Drop extra features (to match training)
+    X = X[expected_features]
+
+    # Normalize using training scaler
+    X_scaled = scaler.transform(X)
+
+    # Predict using the trained model
+    predictions = model.predict(X_scaled)
+    probabilities = model.predict_proba(X_scaled)
+
+    # Aggregate predictions
+    final_prediction = round(np.mean(predictions))  # Majority voting across channels
+    final_prob = np.mean(probabilities, axis=0)
+
+    print(f"Final Prediction: {'MDD' if final_prediction == 1 else 'Healthy'}")
+    print(f"Probabilities: {final_prob}")
+
+    # Reattach non-numeric columns
+    combined_features["prediction"] = predictions
+    alpha_power = combined_features["alpha_power"].mean()
+    beta_power = combined_features["beta_power"].mean()
+    delta_power = combined_features["delta_power"].mean()
+    theta_power = combined_features["theta_power"].mean()
+    final_prediction = "MDD" if final_prediction == 1 else "Healthy"
+    return final_prediction, final_prob, alpha_power, beta_power, delta_power, theta_power
 
 
-def visualize_eeg_data(vhdr_path, vmrk_path, eeg_path):
+def visualize_eeg_data(vhdr_path):
     """Visualize EEG data."""
 # Convert to Pandas DataFrame
-    raw = preprocess_eeg(vhdr_path, vmrk_path, eeg_path)
+    raw = preprocess_eeg_data(vhdr_path)
     df = raw.to_data_frame()
 
     # Save as JSON for React
@@ -173,55 +219,64 @@ def visualize_eeg_data(vhdr_path, vmrk_path, eeg_path):
 
 @app.post("/upload/")
 async def upload_files(
-    vhdr: UploadFile = File(...), vmrk: UploadFile = File(...), eeg: UploadFile = File(...)
+    vhdrEO: UploadFile = File(...), vmrkEO: UploadFile = File(...), eegEO: UploadFile = File(...),
+    vhdrEC: UploadFile = File(...), vmrkEC: UploadFile = File(...), eegEC: UploadFile = File(...)
 ):
     """Handle file uploads and store them with original names."""
+    
     file_paths = {}
     
-    for file in [vhdr, vmrk, eeg]:
+    # Save files to the upload folder
+    for file in [vhdrEO, vmrkEO, eegEO, vhdrEC, vmrkEC, eegEC]:
         file_path = os.path.join(UPLOAD_FOLDER, file.filename)
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         file_paths[file.filename] = file_path  # Store file paths
-    print("Files uploaded successfully",file_paths)
+    
+    print("Files uploaded successfully:", file_paths)
+    
     return {"message": "Files uploaded successfully", "file_paths": file_paths}
+
+
 
 @app.get("/predict")
 async def predict(request: Request):
     """Process EEG files, extract features, and predict."""
     # Get the file paths from the query parameters
-    vhdr_path = request.query_params.get('vhdr')
-    vmrk_path = request.query_params.get('vmrk')
-    eeg_path = request.query_params.get('eeg')
+    vhdr_eo_path = request.query_params.get('vhdrEO')
+    vmrk_eo_path = request.query_params.get('vmrkEO')
+    eeg_eo_path = request.query_params.get('eegEO')
 
-    if not vhdr_path or not vmrk_path or not eeg_path:
-        raise HTTPException(status_code=400, detail="Missing file paths!")
-
-    vhdr_full_path = os.path.join(UPLOAD_FOLDER, vhdr_path)
-    vmrk_full_path = os.path.join(UPLOAD_FOLDER, vmrk_path)
-    eeg_full_path = os.path.join(UPLOAD_FOLDER, eeg_path)
+    vhdr_ec_path = request.query_params.get('vhdrEC')
+    vmrk_ec_path = request.query_params.get('vmrkEC')
+    eeg_ec_path = request.query_params.get('eegEC')
 
     # Check if the provided paths exist
-    if not os.path.exists(vhdr_full_path) or not os.path.exists(vmrk_full_path) or not os.path.exists(eeg_full_path):
-        raise HTTPException(status_code=400, detail="Uploaded files not found!")
+    if not vhdr_eo_path or not vmrk_eo_path or not eeg_eo_path or not vhdr_ec_path or not vmrk_ec_path or not eeg_ec_path:
+        raise HTTPException(status_code=400, detail="Missing file paths!")
 
+    vhdr_eo_full_path = os.path.join(UPLOAD_FOLDER, vhdr_eo_path)
+    vmrk_eo_full_path = os.path.join(UPLOAD_FOLDER, vmrk_eo_path)
+    eeg_eo_full_path = os.path.join(UPLOAD_FOLDER, eeg_eo_path)
+    vhdr_ec_full_path = os.path.join(UPLOAD_FOLDER, vhdr_eo_path)
+    vmrk_ec_full_path = os.path.join(UPLOAD_FOLDER, vmrk_eo_path)
+    eeg_ec_full_path = os.path.join(UPLOAD_FOLDER, eeg_eo_path)
+
+    
     # Process the EEG files (replace with your own function)
     
-    epochs = preprocess_and_return_epochs(vhdr_full_path, vmrk_full_path, eeg_full_path)
-    features = extract_features_from_epochs(epochs)
-    delta,theta,alpha,beta = freq_domain_features(epochs)
+    
     # Make prediction (replace with your model logic)
-    prediction = model.predict(features)
-
-    result = "Healthy" if prediction[0] == 0 else "MDD"
+    result, probabilities, alpha, beta, delta, theta = predict_eeg(vhdr_eo_full_path, vhdr_ec_full_path)
 
     # Append prediction result to the list (optional)
-    predictions.append({"files": [vhdr_path, vmrk_path, eeg_path], "prediction": result})
+    predictions.append({"files_eo": [vhdr_eo_path, vmrk_eo_path, eeg_eo_path],"files_eo": [vhdr_ec_path, vmrk_ec_path, eeg_ec_path], "prediction": result})
     # Return the prediction as a JSON response
     print(delta,theta,alpha,beta)
     print("************************************")
 
-    return {"prediction": result,"delta": f"{delta:.5e}","theta": f"{theta:.5e}","alpha": f"{alpha:.5e}","beta": f"{beta:5e}"}
+
+    return {"prediction": result,"delta": f"{delta:.5e}","theta": f"{theta:.5e}","alpha": f"{alpha:.5e}","beta": f"{beta:5e}","probabilities": probabilities.tolist()}
 
 @app.get("/prediction/")
 async def get_predictions():
@@ -235,7 +290,7 @@ async def get_latest_vhdr_file():
         raise HTTPException(status_code=404, detail="No predictions available")
 
     latest_prediction = predictions[-1]  # Get the latest prediction
-    latest_vhdr_path = latest_prediction["files"][0]  # The first file in the list is the vhdr file
+    latest_vhdr_path = latest_prediction["files_eo"][0]  # The first file in the list is the vhdr file
 
     return {"latest_vhdr_path": latest_vhdr_path}
 
