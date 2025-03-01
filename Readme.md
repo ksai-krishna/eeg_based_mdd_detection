@@ -4,7 +4,7 @@
 ## Here Were using Training Traditional ML algorithms to predict if a person is having MDD or if the individual is healthy
 
 ## Steps to install
-### Step 1 install node.js [click here ](https://nodejs.org/en/download) download and install
+### Step 1 install node.js [click here ](https://nodejs.org/en/download) download and install and [click here](https://www.youtube.com/watch?v=kQabFyl9r9I&t=431s) for a simple tutorial
 ### Step 2 install all required node modules 
 ```
 node install
