@@ -1,7 +1,7 @@
 
 # Project : Classification of MDD vs Healthy controls 
 
-## Here Were using Training Traditional ML algorithms to predict if a person is having MDD or not
+## Here Were using Training Traditional ML algorithms to predict if a person is having MDD or if the individual is healthy
 
 ## Steps to install
 ### Step 1 install node.js [click here ](https://nodejs.org/en/download) download and install
