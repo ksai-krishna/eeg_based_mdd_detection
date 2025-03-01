@@ -4,7 +4,7 @@
 ## Here Were using Training Traditional ML algorithms to predict if a person is having MDD or not
 
 ## Steps to install
-### Step 1 install node.js
+### Step 1 install node.js [click here ](https://nodejs.org/en/download) download and install
 ### Step 2 install all required node modules 
 ```
 node install
@@ -22,4 +22,6 @@ uvicorn app:app --host 0.0.0.0 --port 5000
 node run dev
 ```
 
+
+## To understand the structure of the project please refer documentation.md
 # 🚧🚧 Work Under Progress 🚧🚧
