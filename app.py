@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.fftpack import fft
 import pywt
+from sklearn.preprocessing import LabelEncoder
 
 
 
@@ -57,15 +58,15 @@ vhdr_path=""
 # Load trained model
 # MODEL_PATH = "mw/svm_model.pkl"
 
-MODEL_PATH = "model_weights/rf.pkl"
-Scaler_PATH = "scaler/scaler.pkl"
+MODEL_PATH = "model_weights/xgb_model.pkl"
+SCALER_PATH = "scaler/xgb_scaler.pkl"
 try:
     model = joblib.load(MODEL_PATH)  # Load .pkl model
 except Exception as e:
     raise RuntimeError(f"Error loading model: {e}")
 
 
-scaler = joblib.load(Scaler_PATH)  # Only keeping scaler for feature scaling
+scaler = joblib.load(SCALER_PATH)  # Only keeping scaler for feature scaling
 
 
 # Store predictions
@@ -99,111 +100,138 @@ def preprocess_eeg_data(vhdr_file_path, l_freq=1.0, h_freq=40.0, notch_freq=50):
     plt.close(fig)
     return raw
 
-def extract_features(raw, condition):
-    """Extract EEG features."""
-    raw.pick_types(eeg=True)
+def extract_channel_features(raw, fmin=0.5, fmax=50):
+    # Select only EEG channels
+    raw.pick_types(eeg=True)  # This removes non-EEG channels
     data = raw.get_data()
     channel_names = raw.ch_names
-    feature_list = []
+    features = {ch: {} for ch in channel_names}
 
+    # Time-domain features
     for i, ch in enumerate(channel_names):
-        mean_val = np.mean(data[i])
-        variance = np.var(data[i])
-        skewness = skew(data[i])
-        kurtosis_val = kurtosis(data[i])
-        peak_to_peak = np.ptp(data[i])
+        features[ch]['mean'] = np.mean(data[i])
+        features[ch]['variance'] = np.var(data[i])
+        features[ch]['skewness'] = skew(data[i])
+        features[ch]['kurtosis'] = kurtosis(data[i])
+        features[ch]['peak_to_peak'] = np.ptp(data[i])
 
-        # FFT Features
+        # Fourier Transform (FFT)
         fft_values = np.abs(fft(data[i]))
-        fft_mean = np.mean(fft_values)
-        fft_std = np.std(fft_values)
-        fft_max = np.max(fft_values)
+        features[ch]['fft_mean'] = np.mean(fft_values)
+        features[ch]['fft_std'] = np.std(fft_values)
+        features[ch]['fft_max'] = np.max(fft_values)
 
-        # Wavelet Transform (DWT)
+        # Wavelet Transform (DWT) using Daubechies wavelet (db4) #morle
         coeffs = pywt.wavedec(data[i], 'db4', level=4)
-        wavelet_energy = sum(np.sum(np.square(c)) for c in coeffs)
-        wavelet_entropy = sum(-np.sum((c / np.sum(np.abs(c) + 1e-10)) * np.log2(c / np.sum(np.abs(c) + 1e-10) + 1e-10)) for c in coeffs)
+        features[ch]['wavelet_energy'] = sum(np.sum(np.square(c)) for c in coeffs)
+        features[ch]['wavelet_entropy'] = 0  # Initialize wavelet_entropy
+        
+        for c in coeffs:
+            c = c[np.isfinite(c)]
+            c_norm = c / (np.sum(np.abs(c)) + 1e-10)
+            features[ch]['wavelet_entropy'] += -np.sum(c_norm * np.log2(c_norm + 1e-10))
 
-        # Power Spectral Density (PSD)
-        psd = raw.compute_psd(method='welch', fmin=0.5, fmax=50, n_fft=2048)
-        psd_data = psd.get_data()
-        freqs = psd.freqs
-        psd_df = pd.DataFrame(psd_data, columns=freqs, index=channel_names)
+    # Frequency-domain features using PSD
+    psd = raw.compute_psd(method='welch', fmin=fmin, fmax=fmax, n_fft=2048)
+    psd_data = psd.get_data()
+    freqs = psd.freqs
+    psd_df = pd.DataFrame(psd_data, columns=freqs, index=channel_names)
 
-        # Extract power in specific frequency bands
-        bands = {
-            "delta": (0.5, 4), "theta": (4, 8), "slow_alpha": (6, 9),
-            "alpha": (8, 12), "beta": (12, 30), "gamma": (30, 50)
-        }
-        band_powers = {band: psd_df.loc[ch, (freqs >= low) & (freqs <= high)].mean() for band, (low, high) in bands.items()}
+    bands = {'delta': (0.5, 4), 'theta': (4, 8), 'slow_alpha': (6, 9), 'alpha': (8, 12),
+             'beta': (12, 30), 'gamma': (30, 50)}
 
-        # Store extracted features in a list
-        feature_list.append([condition, ch, mean_val, variance, skewness, kurtosis_val, peak_to_peak,
-                             fft_mean, fft_std, fft_max, wavelet_energy, wavelet_entropy,
-                             band_powers['delta'], band_powers['theta'], band_powers['slow_alpha'],
-                             band_powers['alpha'], band_powers['beta'], band_powers['gamma']])
+    for band, (low, high) in bands.items():
+        band_power = psd_df.loc[:, (freqs >= low) & (freqs <= high)].mean(axis=1)
+        for ch in channel_names:
+            features[ch][f'{band}_power'] = band_power[ch]
 
-    # Convert to DataFrame
-    columns = ["condition", "channel", "mean", "variance", "skewness", "kurtosis", "peak_to_peak",
-               "fft_mean", "fft_std", "fft_max", "wavelet_energy", "wavelet_entropy",
-               "delta_power", "theta_power", "slow_alpha_power", "alpha_power", "beta_power", "gamma_power"]
+    # Frontal Alpha Asymmetry (F3-F4)
+    if 'F3' in channel_names and 'F4' in channel_names:
+        features['F3_F4_alpha_asymmetry'] = features['F4']['alpha_power'] - features['F3']['alpha_power']
+
+    # Convert features to DataFrame
+    features_df = pd.DataFrame(features).T
+
+    return features_df
+
+def process_and_combine(eo_file_path, ec_file_path, output_file):
+    all_features = []
+
+    # Process EO file
+    raw_eo = preprocess_eeg_data(eo_file_path)
+    features_eo = extract_channel_features(raw_eo)
+    #features_eo['condition'] = 'EO'
+    all_features.append(features_eo)
+
+    # Process EC file
+    raw_ec = preprocess_eeg_data(ec_file_path)
+    features_ec = extract_channel_features(raw_ec)
+    #features_ec['condition'] = 'EC'
+    all_features.append(features_ec)
+
+    # Combine EO and EC features
+    combined_features = pd.concat(all_features, keys=['EO', 'EC'], names=['condition', 'channel'])
     
-    df = pd.DataFrame(feature_list, columns=columns)
+    # Save combined features to a single CSV file
+    combined_features.to_csv(output_file)
+    print(f"Features successfully saved to {output_file}")
+    # return combined_features
+
+
+# Modified Function to Load and Preprocess a Single CSV File
+def load_and_preprocess_single_csv(df):
+    """
+    Loads and preprocesses a single CSV file for prediction.
+
+    Args:
+        file_path (str): The path to the CSV file.
+
+    Returns:
+        pandas.DataFrame: Preprocessed DataFrame.
+    """
+
+    # Handle categorical data
+    for col in df.select_dtypes(include=['object']).columns:
+        df[col] = LabelEncoder().fit_transform(df[col])
+
+    # Handle missing values
+    df.fillna(df.median(), inplace=True)
 
     return df
 
-def predict_eeg(vhdr_file_eo, vhdr_file_ec):
-    """Predict EEG data using trained model."""
-    # Process EO and EC files
-    raw_eo = preprocess_eeg_data(vhdr_file_eo)
-    raw_ec = preprocess_eeg_data(vhdr_file_ec)
+def predict_eeg(eo_path, ec_path):
+    # Load and Preprocess the Single CSV File
+    outut_file = "preprocessed.csv"
+    process_and_combine(eo_path, ec_path, outut_file)
+    combined_features = pd.read_csv(outut_file)
+    X_predict = load_and_preprocess_single_csv(combined_features)
+    # Load Pre-trained Model and Scaler
+    
+    best_model = joblib.load(MODEL_PATH)
+    # Apply Same Scaling as Training Data
+    X_predict_scaled = scaler.transform(X_predict)
 
-    features_eo = extract_features(raw_eo, "EO")
-    features_ec = extract_features(raw_ec, "EC")
+    # Predict on the Single CSV Data
+    prediction = best_model.predict(X_predict_scaled)
+    final_prediction = prediction[0]
 
+    try:
+        probability = best_model.predict_proba(X_predict_scaled)[0] # Probabilities for both classes
+        probability_healthy = probability[0] * 100
+        probability_mdd = probability[1] * 100
+        print(f"Probability of being Healthy: {probability_healthy:.2f}%")
+        print(f"Probability of having MDD: {probability_mdd:.2f}%")
+    except AttributeError:
+        print("Prediction probabilities are not available for this model.")
+    except Exception as e:
+        print(f"Error getting prediction probabilities: {e}")
 
-    # Combine EO and EC features
-    combined_features = pd.concat([features_eo, features_ec])
-
-    # Save original columns
-    original_columns = combined_features.columns
-
-    # Drop non-numeric columns (condition, channel) before scaling
-    X = combined_features.drop(columns=["condition", "channel"])
-
-    # Ensure correct feature order (match training order)
-    expected_features = scaler.feature_names_in_  # Get features used during training
-    missing_features = [col for col in expected_features if col not in X.columns]
-    extra_features = [col for col in X.columns if col not in expected_features]
-
-    # Fill missing features with 0
-    for col in missing_features:
-        X[col] = 0
-
-    # Drop extra features (to match training)
-    X = X[expected_features]
-
-    # Normalize using training scaler
-    X_scaled = scaler.transform(X)
-
-    # Predict using the trained model
-    predictions = model.predict(X_scaled)
-    probabilities = model.predict_proba(X_scaled)
-
-    # Aggregate predictions
-    final_prediction = round(np.mean(predictions))  # Majority voting across channels
-    final_prob = np.mean(probabilities, axis=0)
-
-    print(f"Final Prediction: {'MDD' if final_prediction == 1 else 'Healthy'}")
-    print(f"Probabilities: {final_prob}")
-
-    # Reattach non-numeric columns
-    combined_features["prediction"] = predictions
     alpha_power = combined_features["alpha_power"].mean()
     beta_power = combined_features["beta_power"].mean()
     delta_power = combined_features["delta_power"].mean()
     theta_power = combined_features["theta_power"].mean()
     final_prediction = "MDD" if final_prediction == 1 else "Healthy"
+    final_prob = probability_mdd if final_prediction == "MDD" else probability_healthy
     return final_prediction, final_prob, alpha_power, beta_power, delta_power, theta_power
 
 
