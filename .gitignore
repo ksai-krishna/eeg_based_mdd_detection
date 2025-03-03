@@ -2,3 +2,4 @@ __pycache__/
 uploads
 node_modules/
 static
+ibrain_dataset/
