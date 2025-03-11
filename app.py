@@ -18,7 +18,7 @@ import pandas as pd
 from scipy.fftpack import fft
 import pywt
 from sklearn.preprocessing import LabelEncoder
-
+import uvicorn
 
 
 
@@ -322,4 +322,8 @@ async def get_latest_vhdr_file():
 
     return {"latest_vhdr_path": latest_vhdr_path}
 
+if '__name__' == '__main__':
+    
+    uvicorn.run(app, host="0.0.0.0", port=5000)
 ##### uvicorn app:app --host 0.0.0.0 --port 5000  ## Command to run the api server/app
+##### OR python app.py  ## Command to run the api server/app

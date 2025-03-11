@@ -48,6 +48,9 @@ node run dev
 
 ![confusion_matrix](images/xgb_confusion_matrix.png)
 
+## Acknowledgement
+TDBrain Dataset team & Dr. Nagaraj Halemani for providing the comprehensive EEG dataset
+
 ## To understand the structure of the project please refer documentation.md
 
 

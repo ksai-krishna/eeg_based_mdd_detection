@@ -5,6 +5,7 @@ import FileUpload from './components/FileUpload';
 import PredictionResults from './components/PredictionResults';
 import { UploadProvider } from './context/UploadContext';
 import { PredictionProvider } from './context/PredictionContext'; // Import the PredictionProvider
+import HomePage from './components/Homepage';
 
 function App() {
   return (
@@ -19,7 +20,8 @@ function App() {
             </header>
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
               <Routes>
-                <Route path="/" element={<FileUpload />} />
+                <Route path="/" element={<HomePage/>} />
+                <Route path="/upload" element={<FileUpload />} />
                 <Route path="/prediction" element={<PredictionResults />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
