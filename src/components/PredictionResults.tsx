@@ -57,10 +57,10 @@ const PredictionResults = () => {
         </div>
         <EEGVisualization />
       </div>
-      <button onClick={downloadReport} className="mt-6 px-6 py-3 bg-blue-600 text-white rounded-lg flex items-center space-x-2 hover:bg-blue-700">
+      {/* <button onClick={downloadReport} className="mt-6 px-6 py-3 bg-blue-600 text-white rounded-lg flex items-center space-x-2 hover:bg-blue-700">
         <Download className="w-5 h-5" />
         <span>Download Report</span>
-      </button>
+      </button> */}
     </div>
   );
 };
