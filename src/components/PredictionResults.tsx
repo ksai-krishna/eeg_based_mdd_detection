@@ -3,7 +3,7 @@ import { Brain, Download } from 'lucide-react';
 import { usePrediction } from '../context/PredictionContext';
 import EEGVisualization from './EEGVisualization';
 import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+// import jsPDF from 'jspdf';
 
 const PredictionResults = () => {
   const { prediction, delta, theta, alpha, beta } = usePrediction();
