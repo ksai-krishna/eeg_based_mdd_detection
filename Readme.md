@@ -49,6 +49,6 @@ node run dev
 ![confusion_matrix](images/xgb_confusion_matrix.png)
 
 ## Acknowledgement
-We would like to thank the TDBrain Dataset team for providing the comprehensive EEG dataset. Our special gratitude goes to Dr. Nagaraj Halemani Dr. Halemani for training us on understanding EEG data, guiding us through its preprocessing, and introducing us to the EEG domain as a whole, helping us learn how to effectively work with it.
+We would like to thank the TDBrain Dataset team for providing the comprehensive EEG dataset. Our special gratitude goes to Dr. Nagaraj Halemani and Dr selvam for training us on understanding EEG data, guiding us through its preprocessing, and introducing us to the EEG domain as a whole, helping us learn how to effectively work with it.
 
 ## To understand the structure of the project please refer documentation.md 
