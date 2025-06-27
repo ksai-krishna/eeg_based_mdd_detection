@@ -9,7 +9,6 @@ import HomePage from './components/Homepage';
 
 function App() {
   return (
-    <Router>
       <UploadProvider>
         <PredictionProvider> {/* Wrap with PredictionProvider */}
           <div className="min-h-screen bg-gray-50">
@@ -29,7 +28,6 @@ function App() {
           </div>
         </PredictionProvider>
       </UploadProvider>
-    </Router>
   );
 }
 
